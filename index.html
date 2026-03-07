@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>AIC Scanner Pro</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light p-3">
+    <div class="container text-center bg-white shadow rounded p-4" style="max-width: 450px;">
+        <h2 class="text-primary mb-3">AIC Scanner</h2>
+        
+        <select id="choixEtape" class="form-select mb-3 fw-bold border-primary">
+            <option value="✈️ En Transit">✈️ Mettre en Transit</option>
+            <option value="🛬 Arrivé">🛬 Marquer Arrivé</option>
+            <option value="✅ Livré">✅ Marquer Livré</option>
+        </select>
+
+        <div id="reader" class="mb-3"></div>
+        <div id="result" class="p-3 border rounded bg-light min-vh-20"></div>
+    </div>
+
+    <script>
+        function onScanSuccess(decodedText) {
+            const etape = document.getElementById("choixEtape").value;
+            const urlAPI = "https://script.google.com/macros/s/AKfycbxxm9_TbvBnBDUfoxD65lq1og9JIdh4t--8NT0hG1atIoHUN4ZJvDwskhxvQMHhLimQvw/exec"; // <--- REMPLACER ICI
+
+            fetch(`${urlAPI}?code=${decodedText}&setEtape=${etape}`)
+                .then(res => res.json())
+                .then(data => {
+                    const resDiv = document.getElementById("result");
+                    if(data.statut == "trouve"){
+                        resDiv.className = "p-3 border rounded bg-success text-white";
+                        resDiv.innerHTML = `<h4>Validé !</h4>ID: ${data.id}<br>Dest: ${data.destinataire}<br>Poids: ${data.poids}kg`;
+                    } else {
+                        resDiv.className = "p-3 border rounded bg-danger text-white";
+                        resDiv.innerHTML = "<h4>Colis inconnu</h4>";
+                    }
+                });
+        }
+
+        const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        scanner.render(onScanSuccess);
+    </script>
+</body>
+</html>
