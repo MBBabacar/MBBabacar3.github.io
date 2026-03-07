@@ -22,25 +22,33 @@
 
     <script>
         function onScanSuccess(decodedText) {
-            const etape = document.getElementById("choixEtape").value;
-            const urlAPI = "https://script.google.com/macros/s/AKfycbxxm9_TbvBnBDUfoxD65lq1og9JIdh4t--8NT0hG1atIoHUN4ZJvDwskhxvQMHhLimQvw/exec"; // <--- REMPLACER ICI
+    const etape = document.getElementById("choixEtape").value;
+    const urlAPI = "VOTRE_URL_DÉPLOYÉE"; // Mettez votre lien /exec ici
 
-            fetch(`${urlAPI}?code=${decodedText}&setEtape=${etape}`)
-                .then(res => res.json())
-                .then(data => {
-                    const resDiv = document.getElementById("result");
-                    if(data.statut == "trouve"){
-                        resDiv.className = "p-3 border rounded bg-success text-white";
-                        resDiv.innerHTML = `<h4>Validé !</h4>ID: ${data.id}<br>Dest: ${data.destinataire}<br>Poids: ${data.poids}kg`;
-                    } else {
-                        resDiv.className = "p-3 border rounded bg-danger text-white";
-                        resDiv.innerHTML = "<h4>Colis inconnu</h4>";
-                    }
-                });
-        }
+    fetch(`${urlAPI}?code=${decodedText}&setEtape=${etape}`)
+        .then(res => res.json())
+        .then(data => {
+            const resDiv = document.getElementById("result");
+            if(data.statut == "trouve"){
+                resDiv.style.backgroundColor = "#d4edda"; // Vert clair
+                resDiv.innerHTML = `
+                    <h3 style="color: #155724;">✅ Colis trouvé</h3>
+                    <p><strong>ID :</strong> ${data.id}</p>
+                    <p><strong>Client :</strong> ${data.client}</p>
+                    <p><strong>Destination :</strong> ${data.destination}</p>
+                    <p><strong>Nouveau Statut :</strong> ${data.etat}</p>
+                `;
+            } else {
+                resDiv.style.backgroundColor = "#f8d7da"; // Rouge clair
+                resDiv.innerHTML = `<h3 style="color: #721c24;">❌ Colis introuvable</h3>`;
+            }
+        })
+        .catch(err => alert("Erreur de connexion : " + err));
+}
 
         const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
         scanner.render(onScanSuccess);
     </script>
 </body>
+
 </html>
