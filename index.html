@@ -370,6 +370,24 @@
       <div class="step-badge" id="currentStepBadge">En Transit</div>
     </div>
 
+    <!-- Bandeau URL API (collapsible) -->
+    <div id="urlBandeau" style="background:#fff8e1;border-bottom:1px solid #ffe082;padding:8px 14px;font-size:0.72rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleUrlPanel()">
+        <span style="color:#e65100;font-weight:700;">⚙️ Configuration URL API GAS</span>
+        <span id="urlToggleIcon" style="color:#e65100;font-size:0.9rem;">▼</span>
+      </div>
+      <div id="urlPanel" style="margin-top:8px;display:none;">
+        <input type="text" id="inputUrlApi" placeholder="Collez votre URL /exec ici..."
+          style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #ffb74d;font-size:0.72rem;font-family:monospace;color:#333;">
+        <button onclick="sauverUrl()" style="margin-top:6px;width:100%;background:#e65100;color:white;border:none;border-radius:6px;padding:7px;font-weight:700;font-size:0.78rem;cursor:pointer;">
+          💾 Sauvegarder l'URL
+        </button>
+        <div style="margin-top:5px;font-size:0.65rem;color:#888;">
+          GAS → Déployer → Gérer les déploiements → URL /exec
+        </div>
+      </div>
+    </div>
+
     <!-- Sélecteur étape -->
     <div class="step-selector">
       <label>Action à effectuer</label>
@@ -418,25 +436,84 @@
 
 <script>
 // ── Config ──────────────────────────────────────────────────────────────────
+// ⚠️ Mettre ici l'URL de votre déploiement GAS (Menu Déployer → Gérer les déploiements → URL /exec)
 const URL_API = "https://script.google.com/macros/s/AKfycbynYWgLywMcuohQ83WtJLIHzBB5eaRKPvrJpZ1HiNeyUi-NMZm2LmEn8azq_FmbwodI/exec";
 
 // ── Historique session ───────────────────────────────────────────────────────
-let scanHistory = [];
-let lastScanned = null;
-let scanCooldown = false;
+var scanHistory = [];
+var lastScanned = null;
+var scanCooldown = false;
 
 // ── Mise à jour du badge étape ───────────────────────────────────────────────
 function majBadgeEtape() {
-  const sel = document.getElementById("choixEtape");
-  const txt = sel.options[sel.selectedIndex].text.replace(/^[^\w]+/, "").trim();
+  var sel = document.getElementById("choixEtape");
+  var txt = sel.options[sel.selectedIndex].text.replace(/^\S+\s*/, "").trim();
   document.getElementById("currentStepBadge").textContent = txt;
 }
 
 // ── Afficher le résultat ─────────────────────────────────────────────────────
 function afficherResultat(type, html) {
-  const card = document.getElementById("resultCard");
+  var card = document.getElementById("resultCard");
   card.className = "result-card " + type + " visible";
   card.innerHTML = html;
+}
+
+// ── Appel API GAS via JSONP (contourne le CORS de GitHub Pages) ──────────────
+function appelAPI(url, callback) {
+  // Méthode 1 : fetch direct avec redirect follow (fonctionne si GAS bien configuré)
+  fetch(url, {
+    method: "GET",
+    redirect: "follow",
+    mode: "cors"
+  })
+  .then(function(res) {
+    var contentType = res.headers.get("content-type") || "";
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    // GAS peut répondre text/html si mal configuré
+    if (contentType.includes("text/html")) {
+      throw new Error("CORS_HTML");
+    }
+    return res.json();
+  })
+  .then(function(data) { callback(null, data); })
+  .catch(function(err) {
+    // Méthode 2 : JSONP fallback si CORS bloqué
+    if (err.message === "CORS_HTML" || err.message.includes("Load failed") || err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+      appelJSONP(url, callback);
+    } else {
+      callback(err, null);
+    }
+  });
+}
+
+function appelJSONP(url, callback) {
+  var cbName = "_mbs_cb_" + Date.now();
+  var script = document.createElement("script");
+  var timeout = setTimeout(function() {
+    cleanup();
+    callback(new Error("Timeout — vérifiez l'URL du script GAS et l'accès 'Tout le monde'"), null);
+  }, 8000);
+
+  window[cbName] = function(data) {
+    clearTimeout(timeout);
+    cleanup();
+    callback(null, data);
+  };
+
+  function cleanup() {
+    delete window[cbName];
+    if (script.parentNode) script.parentNode.removeChild(script);
+  }
+
+  // Ajouter le callback JSONP à l'URL
+  script.src = url + "&callback=" + cbName;
+  script.onerror = function() {
+    clearTimeout(timeout);
+    cleanup();
+    // Méthode 3 : image ping pour tester la connectivité
+    callback(new Error("Impossible de joindre le serveur.\n• Vérifiez l'URL dans le fichier\n• Déployez avec Accès : Tout le monde"), null);
+  };
+  document.head.appendChild(script);
 }
 
 // ── Callback scan réussi ─────────────────────────────────────────────────────
@@ -450,8 +527,8 @@ function onScanSuccess(decodedText) {
   // Vibration feedback (si disponible)
   if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
 
-  const etape = document.getElementById("choixEtape").value;
-  const now = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  var etape = document.getElementById("choixEtape").value;
+  var now = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   // Afficher chargement
   afficherResultat("loading",
@@ -460,38 +537,49 @@ function onScanSuccess(decodedText) {
     "<div style='font-size:0.72rem;color:#aaa;margin-top:2px;'>" + decodedText + "</div>"
   );
 
-  fetch(URL_API + "?code=" + encodeURIComponent(decodedText) + "&setEtape=" + encodeURIComponent(etape))
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (data.statut === "trouve") {
-        afficherResultat("success",
-          "<div class='result-title' style='color:#1e7e34;'>✅ Colis mis à jour</div>" +
-          "<div class='result-row'><span class='lbl'>ID</span><span class='val'>" + data.id + "</span></div>" +
-          "<div class='result-row'><span class='lbl'>Destinataire</span><span class='val'>" + (data.client || "—") + "</span></div>" +
-          "<div class='result-row'><span class='lbl'>Destination</span><span class='val'>" + (data.destination || "—") + "</span></div>" +
-          "<div class='result-row'><span class='lbl'>Nouveau statut</span><span class='val'><span class='statut-badge'>" + data.etat + "</span></span></div>" +
-          "<div style='font-size:0.65rem;color:#aaa;margin-top:8px;text-align:right;'>" + now + "</div>"
-        );
-        // Ajouter à l'historique
-        ajouterHistorique(data.id, data.etat, now, true);
-      } else {
-        const card = document.getElementById("resultCard");
-        card.classList.add("shake");
-        setTimeout(function() { card.classList.remove("shake"); }, 400);
-        afficherResultat("error",
-          "<div class='result-title' style='color:#c0392b;'>❌ Colis introuvable</div>" +
-          "<div style='font-size:0.82rem;color:#721c24;'>Code scanné : <strong>" + decodedText + "</strong></div>" +
-          "<div style='font-size:0.72rem;color:#aaa;margin-top:6px;'>" + now + "</div>"
-        );
-        ajouterHistorique(decodedText, "Introuvable", now, false);
-      }
-    })
-    .catch(function(err) {
+  var urlRequete = URL_API + "?code=" + encodeURIComponent(decodedText) + "&setEtape=" + encodeURIComponent(etape);
+
+  appelAPI(urlRequete, function(err, data) {
+    if (err) {
+      var msg = err.message || String(err);
       afficherResultat("error",
-        "<div class='result-title' style='color:#c0392b;'>⚠️ Erreur réseau</div>" +
-        "<div style='font-size:0.82rem;color:#721c24;'>" + err.message + "</div>"
+        "<div class='result-title' style='color:#c0392b;'>⚠️ Erreur de connexion</div>" +
+        "<div style='font-size:0.82rem;color:#721c24;margin-bottom:8px;'>" + msg + "</div>" +
+        "<div style='font-size:0.75rem;color:#555;padding:8px;background:rgba(192,57,43,0.06);border-radius:6px;line-height:1.6;'>" +
+        "💡 <strong>À vérifier :</strong><br>" +
+        "① Déployer GAS → <strong>Accès : Tout le monde</strong><br>" +
+        "② Copier la nouvelle URL /exec dans ce fichier<br>" +
+        "③ Connexion internet active" +
+        "</div>"
       );
-    });
+      return;
+    }
+
+    if (data && data.statut === "trouve") {
+      if (navigator.vibrate) navigator.vibrate([100]);
+      afficherResultat("success",
+        "<div class='result-title' style='color:#1e7e34;'>✅ Colis mis à jour</div>" +
+        "<div class='result-row'><span class='lbl'>ID</span><span class='val'>" + (data.id || decodedText) + "</span></div>" +
+        "<div class='result-row'><span class='lbl'>Destinataire</span><span class='val'>" + (data.client || "—") + "</span></div>" +
+        "<div class='result-row'><span class='lbl'>Destination</span><span class='val'>" + (data.destination || "—") + "</span></div>" +
+        "<div class='result-row'><span class='lbl'>Nouveau statut</span><span class='val'><span class='statut-badge'>" + (data.etat || etape) + "</span></span></div>" +
+        "<div style='font-size:0.65rem;color:#aaa;margin-top:8px;text-align:right;'>" + now + "</div>"
+      );
+      ajouterHistorique(data.id || decodedText, data.etat || etape, now, true);
+
+    } else {
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      var card = document.getElementById("resultCard");
+      card.classList.add("shake");
+      setTimeout(function() { card.classList.remove("shake"); }, 400);
+      afficherResultat("error",
+        "<div class='result-title' style='color:#c0392b;'>❌ Colis introuvable</div>" +
+        "<div style='font-size:0.82rem;color:#721c24;'>Code scanné : <strong>" + decodedText + "</strong></div>" +
+        "<div style='font-size:0.72rem;color:#aaa;margin-top:6px;'>" + now + "</div>"
+      );
+      ajouterHistorique(decodedText, "Introuvable", now, false);
+    }
+  });
 }
 
 // ── Historique ───────────────────────────────────────────────────────────────
@@ -527,19 +615,77 @@ function clearHistory() {
 // ── Masquer la ligne de scan quand pas de caméra active ──────────────────────
 function onScanFailure() { /* silencieux */ }
 
-// ── Initialiser le scanner ───────────────────────────────────────────────────
-const scanner = new Html5QrcodeScanner(
-  "reader",
-  {
-    fps: 10,
-    qrbox: { width: 220, height: 220 },
-    rememberLastUsedCamera: true,
-    showTorchButtonIfSupported: true,
-    aspectRatio: 1.0
-  },
-  false
-);
-scanner.render(onScanSuccess, onScanFailure);
+// ── Initialiser le scanner avec caméra ARRIÈRE par défaut ────────────────────
+// On utilise Html5Qrcode (API bas niveau) pour forcer facingMode: environment
+var html5Qrcode = new Html5Qrcode("reader");
+
+var configCamera = {
+  fps: 10,
+  qrbox: { width: 220, height: 220 },
+  aspectRatio: 1.0
+};
+
+// Démarrer directement avec la caméra arrière (environment)
+html5Qrcode.start(
+  { facingMode: "environment" },   // ← caméra ARRIÈRE
+  configCamera,
+  onScanSuccess,
+  onScanFailure
+).catch(function(err) {
+  // Si caméra arrière indisponible → fallback caméra avant
+  console.log("Caméra arrière indisponible, essai caméra avant:", err);
+  html5Qrcode.start(
+    { facingMode: "user" },
+    configCamera,
+    onScanSuccess,
+    onScanFailure
+  ).catch(function(err2) {
+    // Dernier recours : laisser le navigateur choisir
+    Html5Qrcode.getCameras().then(function(cameras) {
+      if (cameras && cameras.length > 0) {
+        // Prendre la dernière caméra (souvent l'arrière sur mobile)
+        var camId = cameras[cameras.length - 1].id;
+        html5Qrcode.start(camId, configCamera, onScanSuccess, onScanFailure)
+          .catch(function(e) { console.error("Impossible de démarrer la caméra:", e); });
+      }
+    });
+  });
+});
+
+// Bouton Stop/Start pour l'UI
+document.addEventListener("DOMContentLoaded", function() {
+  // Ajouter bouton Stop sous le scanner
+  var btnStop = document.createElement("div");
+  btnStop.style.cssText = "text-align:center;margin-top:10px;";
+  btnStop.innerHTML = "<button onclick='toggleScan()' id='btnToggle' style='" +
+    "background:linear-gradient(135deg,#0a1628,#1a3a6e);color:white;border:none;" +
+    "border-radius:8px;padding:9px 24px;font-weight:700;font-size:0.85rem;cursor:pointer;'>" +
+    "⏹ Arrêter le scan</button>";
+  document.querySelector(".scanner-zone").appendChild(btnStop);
+});
+
+var scanActif = true;
+function toggleScan() {
+  var btn = document.getElementById("btnToggle");
+  if (scanActif) {
+    html5Qrcode.stop().then(function() {
+      scanActif = false;
+      btn.innerHTML = "▶️ Reprendre le scan";
+      btn.style.background = "linear-gradient(135deg,#1e7e34,#27ae60)";
+    });
+  } else {
+    html5Qrcode.start(
+      { facingMode: "environment" },
+      configCamera,
+      onScanSuccess,
+      onScanFailure
+    ).then(function() {
+      scanActif = true;
+      btn.innerHTML = "⏹ Arrêter le scan";
+      btn.style.background = "linear-gradient(135deg,#0a1628,#1a3a6e)";
+    });
+  }
+}
 </script>
 </body>
 </html>
